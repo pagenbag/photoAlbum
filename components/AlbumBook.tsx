@@ -297,9 +297,25 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
       const img = new Image();
       const url = URL.createObjectURL(blob);
       img.onload = () => {
+        // Resize for PDF to prevent huge base64 strings (RangeError)
+        // A4 PDF doesn't need more than ~1200px width for screen viewing
+        const MAX_DIMENSION = 1200; 
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+            if (width > height) {
+                height = Math.round(height * (MAX_DIMENSION / width));
+                width = MAX_DIMENSION;
+            } else {
+                width = Math.round(width * (MAX_DIMENSION / height));
+                height = MAX_DIMENSION;
+            }
+        }
+
         const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
+        canvas.width = width;
+        canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
           // Map filterType to CSS filter string
@@ -314,10 +330,10 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
               dramatic: "contrast(1.4) brightness(0.9) saturate(1.2) sepia(0.2)"
           };
           ctx.filter = filterMap[filterType] || "none";
-          ctx.drawImage(img, 0, 0);
+          ctx.drawImage(img, 0, 0, width, height);
           
-          // Using standard JPEG quality
-          resolve(canvas.toDataURL('image/jpeg', 0.85)); 
+          // Using compressed JPEG quality 0.75 for PDF export
+          resolve(canvas.toDataURL('image/jpeg', 0.75)); 
         } else {
           resolve(url); // Fallback
         }
@@ -477,7 +493,7 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
   };
 
   const PhotoViewer: React.FC<{ photo: Photo; onClose: () => void }> = ({ photo, onClose }) => {
-    const [imgUrl, setImgUrl] = useState<string>('');
+    const [imgUrl, setImgUrl] = useState<string | undefined>(undefined);
     
     useEffect(() => {
         const url = URL.createObjectURL(photo.blob);
@@ -554,7 +570,7 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
   };
 
   const PhotoCard: React.FC<{ photo: Photo, index: number }> = ({ photo, index }) => {
-    const [imgUrl, setImgUrl] = useState<string>('');
+    const [imgUrl, setImgUrl] = useState<string | undefined>(undefined);
     const [showFilterMenu, setShowFilterMenu] = useState(false);
     const isEditing = editingPhotoId === photo.id;
     
