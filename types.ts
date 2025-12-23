@@ -20,7 +20,7 @@ export interface Photo {
     description: string;
   }[];
   processed: boolean; // Has Gemini processed this?
-  filter?: 'original' | 'vintage' | 'bw' | 'sepia';
+  filter?: 'original' | 'vintage' | 'bw' | 'sepia' | 'polaroid' | 'cool' | 'warm' | 'dramatic';
 }
 
 // For Dexie

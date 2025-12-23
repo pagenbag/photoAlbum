@@ -39,7 +39,7 @@ export const addPhotoToAlbum = async (albumId: number, file: File): Promise<numb
     mimeType: file.type,
     timestamp: new Date(file.lastModified),
     processed: false,
-    filter: 'vintage' // Default filter
+    filter: 'original' // Default filter
   });
 };
 
@@ -58,7 +58,7 @@ export const updatePhotoMetadata = async (
     location?: string; 
     timestamp?: Date;
     landmarks?: { name: string; url: string; description: string }[];
-    filter?: 'original' | 'vintage' | 'bw' | 'sepia';
+    filter?: 'original' | 'vintage' | 'bw' | 'sepia' | 'polaroid' | 'cool' | 'warm' | 'dramatic';
   }
 ) => {
   await db.photos.update(id, {

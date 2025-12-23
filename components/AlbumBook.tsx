@@ -173,7 +173,7 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
     }
   };
 
-  const handleUpdateFilter = async (photoId: number, filter: 'original' | 'vintage' | 'bw' | 'sepia') => {
+  const handleUpdateFilter = async (photoId: number, filter: Photo['filter']) => {
       try {
           await updatePhotoMetadata(photoId, { filter });
           setPhotos(prev => prev.map(p => {
@@ -229,13 +229,51 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
     }
   };
 
+  const applyFilterToImage = async (blob: Blob, filterType: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(blob);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Map filterType to CSS filter string
+          const filterMap: Record<string, string> = {
+              original: "none",
+              vintage: "sepia(0.3) contrast(1.1) brightness(1.05) saturate(0.85)",
+              bw: "grayscale(1) contrast(1.15) brightness(1.05)",
+              sepia: "sepia(0.8) contrast(1.1) brightness(0.95)",
+              polaroid: "contrast(1.2) brightness(1.1) saturate(1.1) sepia(0.2)",
+              cool: "contrast(1.1) brightness(1.1) saturate(0.9) hue-rotate(180deg) sepia(0.1)",
+              warm: "sepia(0.4) contrast(1.1) brightness(1.05) saturate(1.2)",
+              dramatic: "contrast(1.4) brightness(0.9) saturate(1.2) sepia(0.2)"
+          };
+          ctx.filter = filterMap[filterType] || "none";
+          ctx.drawImage(img, 0, 0);
+          
+          // Using standard JPEG quality
+          resolve(canvas.toDataURL('image/jpeg', 0.85)); 
+        } else {
+          resolve(url); // Fallback
+        }
+        URL.revokeObjectURL(url);
+      };
+      img.onerror = () => {
+          resolve(url);
+          URL.revokeObjectURL(url);
+      }
+      img.src = url;
+    });
+  };
+
   const handleExportPDF = async () => {
     if (!album.id) return;
     setIsExporting(true);
     
     try {
-      // Use logic from existing loadPhotos but without pagination
-      const allPhotos = [...photos]; // Photos are already sorted by state updates
+      const allPhotos = [...photos]; 
 
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       
@@ -272,7 +310,6 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
       doc.text(`Created on ${album.createdAt.toLocaleDateString()}`, pageWidth / 2, pageHeight / 2 + 10, { align: 'center' });
       
       // Photos
-      // We process 2 photos per PDF page (Left side, Right side)
       for (let i = 0; i < allPhotos.length; i += 2) {
         doc.addPage();
         doc.setFillColor(bgColor);
@@ -291,11 +328,12 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
             const startX = xOffset + 10;
             const startY = 20;
             
-            // Image
-            const base64 = await blobToBase64(photo.blob);
+            // Image with applied filter
+            const filterToUse = photo.filter || 'original';
+            const base64DataUrl = await applyFilterToImage(photo.blob, filterToUse);
             
-            // Calculate aspect ratio to fit image in a box of roughly contentWidth x 100mm
-            const imgProps = doc.getImageProperties(base64);
+            // Calculate aspect ratio
+            const imgProps = doc.getImageProperties(base64DataUrl);
             const imgRatio = imgProps.width / imgProps.height;
             let imgW = contentWidth;
             let imgH = imgW / imgRatio;
@@ -310,10 +348,9 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
             
             try {
                 // jsPDF handles format detection usually, but we can hint it
-                doc.addImage(base64, photo.mimeType.split('/')[1] === 'jpeg' ? 'JPEG' : 'PNG', imgX, startY, imgW, imgH);
+                doc.addImage(base64DataUrl, 'JPEG', imgX, startY, imgW, imgH);
             } catch (err) {
                 console.error("Failed to add image to PDF", err);
-                // Fallback text
                 doc.setFontSize(8);
                 doc.text("Image Error", imgX, startY + 10);
             }
@@ -390,14 +427,18 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
     const rotation = useMemo(() => album.theme === 'minimal' ? 0 : Math.random() * 4 - 2, [album.theme]); 
 
     // Filter styles mapping
-    const filterStyles = {
+    const filterStyles: Record<string, string> = {
         original: "",
         vintage: "sepia-[0.3] contrast-[1.1] brightness-[1.05] saturate-[0.85]",
         bw: "grayscale-[1] contrast-[1.15] brightness-[1.05]",
-        sepia: "sepia-[0.8] contrast-[1.1] brightness-[0.95]"
+        sepia: "sepia-[0.8] contrast-[1.1] brightness-[0.95]",
+        polaroid: "contrast-[1.2] brightness-[1.1] saturate-[1.1] sepia-[0.2]",
+        cool: "contrast-[1.1] brightness-[1.1] saturate-[0.9] hue-rotate-180 sepia-[0.1]",
+        warm: "sepia-[0.4] contrast-[1.1] brightness-[1.05] saturate-[1.2]",
+        dramatic: "contrast-[1.4] brightness-[0.9] saturate-[1.2] sepia-[0.2]"
     };
 
-    const currentFilter = photo.filter || 'vintage'; // Default to vintage if not set
+    const currentFilter = photo.filter || 'original';
 
     return (
       <div 
@@ -433,8 +474,8 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
             </button>
             
             {showFilterMenu && (
-                <div className="absolute top-8 left-0 bg-white border border-stone-200 shadow-lg rounded p-1 flex flex-col gap-1 w-24">
-                     {['original', 'vintage', 'bw', 'sepia'].map((f) => (
+                <div className="absolute top-8 left-0 bg-white border border-stone-200 shadow-lg rounded p-1 flex flex-col gap-1 w-32 max-h-48 overflow-y-auto z-50">
+                     {Object.keys(filterStyles).map((f) => (
                          <button
                             key={f}
                             onClick={() => {

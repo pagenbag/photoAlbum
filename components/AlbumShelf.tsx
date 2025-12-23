@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { db, createAlbum, addPhotoToAlbum, getAlbums, setAlbumCover, getAlbumPhotos, updateAlbum } from '../services/db';
 import { Album } from '../types';
 
@@ -80,6 +80,11 @@ const AlbumShelf: React.FC<AlbumShelfProps> = ({ onSelectAlbum }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editTitle, setEditTitle] = useState(album.title);
 
+    // Random vertical offset for imperfect alignment (-10px to +10px)
+    const yOffset = useMemo(() => Math.floor(Math.random() * 20) - 10, []);
+    // Random rotation (-2 to 2 deg)
+    const rotate = useMemo(() => Math.floor(Math.random() * 4) - 2, []);
+
     useEffect(() => {
       const loadData = async () => {
         if (!album.id) return;
@@ -141,7 +146,8 @@ const AlbumShelf: React.FC<AlbumShelfProps> = ({ onSelectAlbum }) => {
     return (
       <div 
         onClick={() => !isEditing && album.id && onSelectAlbum(album.id)}
-        className="group relative w-48 h-64 cursor-pointer transform transition-transform duration-300 hover:-translate-y-2 hover:rotate-1"
+        className="group relative w-48 h-64 cursor-pointer transition-transform duration-300 hover:z-20 hover:-translate-y-4 hover:shadow-2xl"
+        style={{ transform: `translateY(${yOffset}px) rotate(${rotate}deg)` }}
       >
         {/* Spine/Binding effect */}
         <div className="absolute left-0 top-0 bottom-0 w-4 bg-stone-800 rounded-l-md z-20 shadow-lg"></div>
@@ -198,28 +204,36 @@ const AlbumShelf: React.FC<AlbumShelfProps> = ({ onSelectAlbum }) => {
   };
 
   return (
-    <div className="flex-1 leather-texture p-8 overflow-y-auto relative">
-      <div className="max-w-6xl mx-auto">
-        <header className="mb-12 text-center">
+    <div className="flex-1 min-h-screen leather-texture p-8 overflow-y-auto relative flex flex-col">
+      <div className="max-w-6xl mx-auto w-full flex-1 flex flex-col">
+        <header className="mb-12 text-center pt-8">
             <h1 className="font-playfair text-5xl text-stone-200 mb-2 drop-shadow-md">My Collection</h1>
             <p className="font-caveat text-xl text-stone-400">Memories preserved in ink & pixel</p>
         </header>
 
-        <div className="flex flex-wrap gap-12 justify-center items-end min-h-[400px]">
-             {/* Shelf Row */}
-             <div className="w-full flex flex-wrap gap-12 justify-center pb-8 border-b-8 border-[#3e2716] shadow-[0_10px_20px_rgba(0,0,0,0.5)] bg-[url('https://www.transparenttextures.com/patterns/wood-pattern.png')]">
-                {albums.map(album => (
-                    <AlbumCover key={album.id} album={album} />
-                ))}
+        <div className="flex-1 flex flex-col justify-end pb-24">
+             {/* Shelf Row Container */}
+             <div className="w-full flex justify-center relative px-12">
+                
+                {/* The Wooden Shelf Surface - Positioned absolute at bottom */}
+                <div className="absolute bottom-0 left-0 right-0 h-12 bg-[url('https://www.transparenttextures.com/patterns/wood-pattern.png')] bg-stone-800 border-t-[12px] border-[#3e2716] shadow-xl rounded-sm z-0"></div>
 
-                {/* Add New Album Placeholder */}
-                <div 
-                    onClick={handleStartCreate}
-                    className="w-48 h-64 cursor-pointer flex flex-col items-center justify-center border-4 border-dashed border-stone-600 rounded-lg hover:border-stone-400 hover:bg-white/5 transition-colors group"
-                >
-                    <div className="text-6xl text-stone-600 group-hover:text-stone-400 font-light mb-2">+</div>
-                    <span className="font-playfair text-stone-500 group-hover:text-stone-300">Create Album</span>
-                    {isImporting && <span className="text-xs text-amber-500 mt-2 font-bold animate-pulse">Importing...</span>}
+                {/* Albums Container - Flex items aligned to bottom of the container, but container sits on shelf */}
+                <div className="flex flex-wrap gap-12 justify-center items-end relative z-10 mb-2 w-full">
+                    {albums.map(album => (
+                        <AlbumCover key={album.id} album={album} />
+                    ))}
+
+                    {/* Add New Album Placeholder */}
+                    <div 
+                        onClick={handleStartCreate}
+                        className="w-48 h-64 cursor-pointer flex flex-col items-center justify-center border-4 border-dashed border-stone-600 rounded-lg hover:border-stone-400 hover:bg-white/5 transition-colors group mb-0 bg-stone-800/30"
+                        style={{ transform: 'rotate(2deg)' }}
+                    >
+                        <div className="text-6xl text-stone-600 group-hover:text-stone-400 font-light mb-2">+</div>
+                        <span className="font-playfair text-stone-500 group-hover:text-stone-300">Create Album</span>
+                        {isImporting && <span className="text-xs text-amber-500 mt-2 font-bold animate-pulse">Importing...</span>}
+                    </div>
                 </div>
              </div>
         </div>
