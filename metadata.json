@@ -1,0 +1,5 @@
+{
+  "name": "Nostalgia - AI Photo Album",
+  "description": "An intelligent photo album creating digital scrapbooks from your local directories. Features handwritten notes and location discovery using Gemini AI.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nostalgia - AI Photo Album</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              caveat: ['Caveat', 'cursive'],
+              playfair: ['"Playfair Display"', 'serif'],
+              inter: ['Inter', 'sans-serif'],
+            }
+          }
+        }
+      }
+    </script>
+    <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+      /* Custom scrollbar for album look */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      .paper-texture {
+        background-color: #fdfbf7;
+        background-image: radial-gradient(#e3e3e3 1px, transparent 1px);
+        background-size: 20px 20px;
+      }
+      .notebook-texture {
+        background-color: #ffffff;
+        background-image: linear-gradient(#e5e7eb 1px, transparent 1px);
+        background-size: 100% 2rem;
+        background-position: 0 1rem;
+      }
+      .leather-texture {
+        background-color: #5c3a21;
+        background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%234a2e19' fill-opacity='0.4' fill-rule='evenodd'/%3E%3C/svg%3E");
+      }
+
+      /* Print Styles for PDF Export */
+      @media print {
+        @page { margin: 1cm; size: auto; }
+        body { 
+          background: white !important; 
+          color: black !important;
+          overflow: visible !important;
+        }
+        #root { height: auto !important; width: auto !important; }
+        
+        /* Hide UI Elements */
+        .no-print, button, nav, header { display: none !important; }
+        
+        /* Reset Book Layout to List */
+        .perspective-\[2000px\] { perspective: none !important; }
+        .transform { transform: none !important; }
+        .absolute { position: static !important; }
+        
+        /* Ensure all photos are visible */
+        .overflow-y-auto { overflow: visible !important; height: auto !important; }
+        
+        /* Layout overrides */
+        .flex-1 { flex: none !important; }
+        .h-screen { height: auto !important; }
+        .w-full { width: 100% !important; }
+        
+        /* Photo Card Reset */
+        .photo-card {
+          break-inside: avoid;
+          page-break-inside: avoid;
+          margin-bottom: 2rem !important;
+          box-shadow: none !important;
+          border: 1px solid #ccc !important;
+        }
+        
+        /* Container Resets */
+        .flex-row-print-reset {
+          display: block !important;
+        }
+        .page-container {
+          box-shadow: none !important;
+          border: none !important;
+          background: white !important;
+          padding: 0 !important;
+        }
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "dexie": "https://esm.sh/dexie@^4.2.1"
+  }
+}
+</script>
+</head>
+  <body class="bg-stone-900 text-stone-800 antialiased overflow-hidden">
+    <div id="root" class="h-screen w-screen flex flex-col"></div>
+  </body>
+</html>
