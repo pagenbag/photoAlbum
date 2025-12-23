@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { jsPDF } from "jspdf";
-import { getAlbumPhotos, updatePhotoMetadata, setAlbumCover, addPhotoToAlbum } from '../services/db';
+import { getAlbumPhotos, updatePhotoMetadata, setAlbumCover, addPhotoToAlbum, deletePhoto } from '../services/db';
 import { analyzePhoto, GeminiAnalysisResult, blobToBase64 } from '../services/geminiService';
 import { Photo, Album } from '../types';
 
@@ -135,6 +135,22 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
     
     setIsAddingPhotos(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleRemovePhoto = async (photoId: number) => {
+    if (window.confirm("Remove this photo from the album?")) {
+        try {
+            await deletePhoto(photoId);
+            setPhotos(prev => prev.filter(p => p.id !== photoId));
+            
+            // Adjust pagination if necessary
+            if (currentPhotos.length === 1 && currentPage > 0) {
+                setCurrentPage(p => p - 1);
+            }
+        } catch (error) {
+            console.error("Failed to remove photo", error);
+        }
+    }
   };
 
   // Pagination logic: 2 photos per page to simulate an open book
@@ -433,7 +449,7 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
         bw: "grayscale-[1] contrast-[1.15] brightness-[1.05]",
         sepia: "sepia-[0.8] contrast-[1.1] brightness-[0.95]",
         polaroid: "contrast-[1.2] brightness-[1.1] saturate-[1.1] sepia-[0.2]",
-        cool: "contrast-[1.1] brightness-[1.1] saturate-[0.9] hue-rotate-180 sepia-[0.1]",
+        cool: "contrast-[1.1] brightness-[1.1] saturate-[0.9] hue-rotate(180deg) sepia-[0.1]",
         warm: "sepia-[0.4] contrast-[1.1] brightness-[1.05] saturate-[1.2]",
         dramatic: "contrast-[1.4] brightness-[0.9] saturate-[1.2] sepia-[0.2]"
     };
@@ -459,8 +475,18 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
         <button 
             onClick={() => photo.id && handleSetCover(photo.id)}
             className="no-print absolute top-2 right-2 z-10 bg-stone-800/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover/card:opacity-100 transition-opacity"
+            title="Set as Album Cover"
         >
             Set as Cover
+        </button>
+
+         {/* Remove Photo Button */}
+         <button 
+            onClick={() => photo.id && handleRemovePhoto(photo.id)}
+            className="no-print absolute top-8 right-2 z-10 bg-red-800/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover/card:opacity-100 transition-opacity"
+            title="Remove Photo from Album"
+        >
+            Remove
         </button>
 
         {/* Filter Toggle (Visible on hover) */}

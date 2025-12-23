@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { db, createAlbum, addPhotoToAlbum, getAlbums, setAlbumCover, getAlbumPhotos, updateAlbum } from '../services/db';
+import { db, createAlbum, addPhotoToAlbum, getAlbums, setAlbumCover, getAlbumPhotos, updateAlbum, deleteAlbum } from '../services/db';
 import { Album } from '../types';
 
 interface AlbumShelfProps {
@@ -135,6 +135,16 @@ const AlbumShelf: React.FC<AlbumShelfProps> = ({ onSelectAlbum }) => {
             loadAlbums();
         }
     };
+    
+    const handleDeleteAlbum = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!album.id) return;
+        
+        if (window.confirm(`Are you sure you want to delete "${album.title}"?\n\nThis will remove the album from Nostalgia but keep your files on disk.`)) {
+            await deleteAlbum(album.id);
+            loadAlbums();
+        }
+    };
 
     // Theme badge colors
     const themeBadgeColor = {
@@ -168,6 +178,15 @@ const AlbumShelf: React.FC<AlbumShelfProps> = ({ onSelectAlbum }) => {
                     </div>
                 ) : (
                     <div className="group/title w-full h-full flex flex-col items-center justify-center relative">
+                        {/* Delete Button (Left) */}
+                        <button 
+                            onClick={handleDeleteAlbum}
+                            className="absolute top-0 left-0 p-1 opacity-0 group-hover/title:opacity-100 text-stone-300 hover:text-red-300 transition-opacity"
+                            title="Delete Album"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                        
                         <h3 className="font-playfair text-white text-center text-lg leading-tight line-clamp-2">
                             {album.title}
                         </h3>
@@ -177,9 +196,11 @@ const AlbumShelf: React.FC<AlbumShelfProps> = ({ onSelectAlbum }) => {
                         <span className={`absolute top-1 right-1 text-[8px] px-1 rounded uppercase tracking-wide opacity-50 ${themeBadgeColor}`}>
                             {album.theme}
                         </span>
+                        
+                        {/* Edit Button (Right) */}
                         <button 
                             onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
-                            className="absolute top-0 right-0 p-1 opacity-0 group-hover/title:opacity-100 text-stone-300 hover:text-white"
+                            className="absolute top-0 right-0 p-1 opacity-0 group-hover/title:opacity-100 text-stone-300 hover:text-white transition-opacity"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                         </button>

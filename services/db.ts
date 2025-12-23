@@ -32,6 +32,14 @@ export const updateAlbum = async (id: number, changes: Partial<Album>) => {
   await db.albums.update(id, changes);
 };
 
+export const deleteAlbum = async (id: number) => {
+  // Fix: Cast db to any to access transaction method which TS thinks is missing on the subclass
+  await (db as any).transaction('rw', db.albums, db.photos, async () => {
+    await db.photos.where('albumId').equals(id).delete();
+    await db.albums.delete(id);
+  });
+};
+
 export const addPhotoToAlbum = async (albumId: number, file: File): Promise<number> => {
   return await db.photos.add({
     albumId,
@@ -41,6 +49,10 @@ export const addPhotoToAlbum = async (albumId: number, file: File): Promise<numb
     processed: false,
     filter: 'original' // Default filter
   });
+};
+
+export const deletePhoto = async (id: number) => {
+  await db.photos.delete(id);
 };
 
 export const getAlbumPhotos = async (albumId: number): Promise<Photo[]> => {
