@@ -32,6 +32,12 @@ export const analyzePhoto = async (photo: Photo): Promise<GeminiAnalysisResult> 
   try {
     const base64Data = await blobToBase64(photo.blob);
 
+    // Prepare location context from metadata if available
+    let locationContext = "";
+    if (photo.latitude !== undefined && photo.longitude !== undefined) {
+        locationContext = `The photo metadata indicates it was taken at GPS coordinates: ${photo.latitude}, ${photo.longitude}. Use this to help identify the location/city/country.`;
+    }
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
@@ -44,6 +50,7 @@ export const analyzePhoto = async (photo: Photo): Promise<GeminiAnalysisResult> 
           },
           {
             text: `Analyze this photo for a personal photo album.
+            ${locationContext}
             1. Write a very concise caption (1 sentence) focusing on the location, environment, and vibe.
                - Ignore specific details about people (do not mention "two men", "a woman in a dress", etc.).
                - Instead of "Two men standing in front of the Eiffel Tower", say "At the Eiffel Tower".

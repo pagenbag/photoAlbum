@@ -3,6 +3,7 @@ import AlbumShelf from './components/AlbumShelf';
 import AlbumBook from './components/AlbumBook';
 import { Album } from './types';
 import { getAlbums } from './services/db';
+import { UIProvider } from './components/UIContext';
 
 const App: React.FC = () => {
   const [selectedAlbumId, setSelectedAlbumId] = useState<number | null>(null);
@@ -23,16 +24,18 @@ const App: React.FC = () => {
   }, [selectedAlbumId]);
 
   return (
-    <div className="w-full h-full">
-      {selectedAlbumId && currentAlbum ? (
-        <AlbumBook 
-          album={currentAlbum} 
-          onBack={() => setSelectedAlbumId(null)} 
-        />
-      ) : (
-        <AlbumShelf onSelectAlbum={setSelectedAlbumId} />
-      )}
-    </div>
+    <UIProvider>
+        <div className="w-full h-full">
+        {selectedAlbumId && currentAlbum ? (
+            <AlbumBook 
+            album={currentAlbum} 
+            onBack={() => setSelectedAlbumId(null)} 
+            />
+        ) : (
+            <AlbumShelf onSelectAlbum={setSelectedAlbumId} />
+        )}
+        </div>
+    </UIProvider>
   );
 };
 

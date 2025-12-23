@@ -1,5 +1,6 @@
 import Dexie, { Table } from 'dexie';
 import { Album, Photo } from '../types';
+import { getExifData } from './exifService';
 
 // We use Dexie (IndexedDB wrapper) because standard SQLite via WASM 
 // is difficult to persist in a browser-only environment without a backend.
@@ -41,13 +42,19 @@ export const deleteAlbum = async (id: number) => {
 };
 
 export const addPhotoToAlbum = async (albumId: number, file: File): Promise<number> => {
+  // Try to extract metadata
+  const { date, latitude, longitude } = await getExifData(file);
+
   return await db.photos.add({
     albumId,
     blob: file,
     mimeType: file.type,
-    timestamp: new Date(file.lastModified),
+    // Use EXIF date if available, otherwise file modification date
+    timestamp: date || new Date(file.lastModified),
     processed: false,
-    filter: 'original' // Default filter
+    filter: 'original', // Default filter
+    latitude,
+    longitude
   });
 };
 

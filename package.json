@@ -13,7 +13,8 @@
     "@google/genai": "^1.34.0",
     "react": "^19.2.3",
     "dexie": "^4.2.1",
-    "jspdf": "^2.5.1"
+    "jspdf": "^2.5.1",
+    "exif-js": "^2.3.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

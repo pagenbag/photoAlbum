@@ -3,6 +3,7 @@ import { jsPDF } from "jspdf";
 import { getAlbumPhotos, updatePhotoMetadata, setAlbumCover, addPhotoToAlbum, deletePhoto } from '../services/db';
 import { analyzePhoto, GeminiAnalysisResult, blobToBase64 } from '../services/geminiService';
 import { Photo, Album } from '../types';
+import { useUI } from './UIContext';
 
 interface AlbumBookProps {
   album: Album;
@@ -18,6 +19,7 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
   const [isAutoAnalyzing, setIsAutoAnalyzing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { showToast, confirm } = useUI();
 
   // Edit state buffers
   const [editDescription, setEditDescription] = useState('');
@@ -127,9 +129,10 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
         try {
             await Promise.all(imageFiles.map(file => addPhotoToAlbum(album.id!, file)));
             await loadPhotos();
+            showToast(`${imageFiles.length} photos added successfully`, "success");
         } catch (error) {
             console.error("Error adding photos", error);
-            alert("Failed to add photos.");
+            showToast("Failed to add photos.", "error");
         }
     }
     
@@ -138,19 +141,27 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
   };
 
   const handleRemovePhoto = async (photoId: number) => {
-    if (window.confirm("Remove this photo from the album?")) {
-        try {
-            await deletePhoto(photoId);
-            setPhotos(prev => prev.filter(p => p.id !== photoId));
-            
-            // Adjust pagination if necessary
-            if (currentPhotos.length === 1 && currentPage > 0) {
-                setCurrentPage(p => p - 1);
+    confirm({
+        title: "Remove Photo?",
+        message: "Are you sure you want to remove this photo from the album?\nThis will not delete the original file.",
+        confirmText: "Remove",
+        isDangerous: true,
+        onConfirm: async () => {
+            try {
+                await deletePhoto(photoId);
+                setPhotos(prev => prev.filter(p => p.id !== photoId));
+                showToast("Photo removed", "info");
+                
+                // Adjust pagination if necessary
+                if (currentPhotos.length === 1 && currentPage > 0) {
+                    setCurrentPage(p => p - 1);
+                }
+            } catch (error) {
+                console.error("Failed to remove photo", error);
+                showToast("Failed to remove photo", "error");
             }
-        } catch (error) {
-            console.error("Failed to remove photo", error);
         }
-    }
+    });
   };
 
   // Pagination logic: 2 photos per page to simulate an open book
@@ -241,7 +252,7 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
   const handleSetCover = async (photoId: number) => {
     if (album.id) {
         await setAlbumCover(album.id, photoId);
-        alert("Cover updated!");
+        showToast("Album cover updated!", "success");
     }
   };
 
@@ -420,9 +431,10 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
       
       const fileName = `${album.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`;
       doc.save(fileName);
+      showToast("PDF exported successfully", "success");
     } catch (e) {
       console.error("PDF Generation failed", e);
-      alert("Failed to generate PDF. See console for details.");
+      showToast("Failed to generate PDF. Check console.", "error");
     } finally {
       setIsExporting(false);
     }

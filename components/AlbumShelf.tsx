@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { db, createAlbum, addPhotoToAlbum, getAlbums, setAlbumCover, getAlbumPhotos, updateAlbum, deleteAlbum } from '../services/db';
 import { Album } from '../types';
+import { useUI } from './UIContext';
 
 interface AlbumShelfProps {
   onSelectAlbum: (albumId: number) => void;
@@ -9,6 +10,7 @@ interface AlbumShelfProps {
 const AlbumShelf: React.FC<AlbumShelfProps> = ({ onSelectAlbum }) => {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [isImporting, setIsImporting] = useState(false);
+  const { showToast, confirm } = useUI();
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -44,7 +46,7 @@ const AlbumShelf: React.FC<AlbumShelfProps> = ({ onSelectAlbum }) => {
     // Filter strictly for images
     const imageFiles = files.filter(f => f.type.startsWith('image/'));
     if (imageFiles.length === 0) {
-      alert("No images found in selection.");
+      showToast("No images found in the selected folder.", "error");
       setIsImporting(false);
       return;
     }
@@ -64,9 +66,10 @@ const AlbumShelf: React.FC<AlbumShelfProps> = ({ onSelectAlbum }) => {
       }
 
       await loadAlbums();
+      showToast("Album created successfully!", "success");
     } catch (err) {
       console.error("Failed to create album", err);
-      alert("Failed to create album. Please try again.");
+      showToast("Failed to create album. Please try again.", "error");
     } finally {
       setIsImporting(false);
       // Reset input
@@ -140,10 +143,17 @@ const AlbumShelf: React.FC<AlbumShelfProps> = ({ onSelectAlbum }) => {
         e.stopPropagation();
         if (!album.id) return;
         
-        if (window.confirm(`Are you sure you want to delete "${album.title}"?\n\nThis will remove the album from Nostalgia but keep your files on disk.`)) {
-            await deleteAlbum(album.id);
-            loadAlbums();
-        }
+        confirm({
+            title: `Delete "${album.title}"?`,
+            message: "This will remove the album from Nostalgia.\nYour original files on disk will NOT be deleted.",
+            confirmText: "Delete Album",
+            isDangerous: true,
+            onConfirm: async () => {
+                await deleteAlbum(album.id!);
+                loadAlbums();
+                showToast("Album deleted", "info");
+            }
+        });
     };
 
     // Theme badge colors
@@ -273,7 +283,7 @@ const AlbumShelf: React.FC<AlbumShelfProps> = ({ onSelectAlbum }) => {
 
         {/* Create Album Modal */}
         {isModalOpen && (
-            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 animate-[fadeIn_0.2s_ease-out]">
                 <div className="bg-[#fdfbf7] p-8 rounded-lg shadow-2xl max-w-md w-full relative border border-stone-300">
                     <button 
                         onClick={() => setIsModalOpen(false)}

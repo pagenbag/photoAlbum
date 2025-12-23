@@ -14,6 +14,8 @@ export interface Photo {
   timestamp: Date;
   description?: string; // AI generated description
   location?: string; // AI identified location
+  latitude?: number; // From EXIF
+  longitude?: number; // From EXIF
   landmarks?: {
     name: string;
     url: string;
