@@ -78,74 +78,108 @@ export interface GeminiAnalysisResult {
   }[];
 }
 
-export const analyzePhoto = async (photo: Photo): Promise<GeminiAnalysisResult> => {
+export const analyzePhoto = async (photo: Photo): Promise<GeminiAnalysisResult | null> => {
+  let base64Data: string;
+  
   try {
     // Use resizeImage instead of raw blobToBase64
-    const base64Data = await resizeImage(photo.blob);
+    base64Data = await resizeImage(photo.blob);
+  } catch (e) {
+    console.error("Failed to process image for upload", e);
+    return null;
+  }
 
-    // Prepare location context from metadata if available
-    let locationContext = "";
-    if (photo.latitude !== undefined && photo.longitude !== undefined) {
-        locationContext = `The photo metadata indicates it was taken at GPS coordinates: ${photo.latitude}, ${photo.longitude}. Use this to help identify the location/city/country.`;
-    }
+  // Prepare location context from metadata if available
+  let locationContext = "";
+  if (photo.latitude !== undefined && photo.longitude !== undefined) {
+      locationContext = `The photo metadata indicates it was taken at GPS coordinates: ${photo.latitude}, ${photo.longitude}. Use this to help identify the location/city/country.`;
+  }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: 'image/jpeg', // Resized image is always JPEG
-              data: base64Data
-            }
-          },
-          {
-            text: `Analyze this photo for a personal photo album.
-            ${locationContext}
-            1. Write a very concise caption (1 sentence) focusing on the location, environment, and vibe.
-               - Ignore specific details about people (do not mention "two men", "a woman in a dress", etc.).
-               - Instead of "Two men standing in front of the Eiffel Tower", say "At the Eiffel Tower".
-               - Instead of "People drinking beer at a bar", say "Drinks at [Bar Name/Location]".
-               - Capture the atmosphere (e.g., "Sunny afternoon", "Rainy day", "Busy market") combined with the place.
-               - If the location is unknown, describe the setting simply (e.g., "Relaxing in the garden", "Mountain view").
-            2. Identify the specific location if possible (City, Country, or Landmark).
-            3. If there is a famous landmark, museum, or monument, provide its name, a very brief fact, and a valid Google Search URL for it.
-            
-            Return ONLY JSON.`
-          }
-        ]
-      },
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            description: { type: Type.STRING, description: "A concise, location-focused caption." },
-            location: { type: Type.STRING, description: "The identified location, city, or country." },
-            landmarks: {
-              type: Type.ARRAY,
-              items: {
+  const performRequest = async (isRetry: boolean): Promise<GeminiAnalysisResult> => {
+      try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: {
+                parts: [
+                {
+                    inlineData: {
+                    mimeType: 'image/jpeg', // Resized image is always JPEG
+                    data: base64Data
+                    }
+                },
+                {
+                    text: `Analyze this photo for a personal photo album.
+                    ${locationContext}
+                    1. Write a very concise caption (1 sentence) focusing on the location, environment, and vibe.
+                    - Ignore specific details about people (do not mention "two men", "a woman in a dress", etc.).
+                    - Instead of "Two men standing in front of the Eiffel Tower", say "At the Eiffel Tower".
+                    - Instead of "People drinking beer at a bar", say "Drinks at [Bar Name/Location]".
+                    - Capture the atmosphere (e.g., "Sunny afternoon", "Rainy day", "Busy market") combined with the place.
+                    - If the location is unknown, describe the setting simply (e.g., "Relaxing in the garden", "Mountain view").
+                    2. Identify the specific location if possible (City, Country, or Landmark).
+                    3. If there is a famous landmark, museum, or monument, provide its name, a very brief fact, and a valid Google Search URL for it.
+                    
+                    Return ONLY JSON.`
+                }
+                ]
+            },
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: {
                 type: Type.OBJECT,
                 properties: {
-                  name: { type: Type.STRING },
-                  description: { type: Type.STRING },
-                  url: { type: Type.STRING }
+                    description: { type: Type.STRING, description: "A concise, location-focused caption." },
+                    location: { type: Type.STRING, description: "The identified location, city, or country." },
+                    landmarks: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                        name: { type: Type.STRING },
+                        description: { type: Type.STRING },
+                        url: { type: Type.STRING }
+                        }
+                    }
+                    }
                 }
-              }
+                }
             }
-          }
-        }
-      }
-    });
+        });
 
-    const text = response.text;
-    if (!text) throw new Error("No response from Gemini");
-    
-    return JSON.parse(text) as GeminiAnalysisResult;
-  } catch (error) {
+        const text = response.text;
+        if (!text) throw new Error("No response from Gemini");
+        return JSON.parse(text) as GeminiAnalysisResult;
+
+      } catch (error: any) {
+         // Check for Quota Exceeded (429 / RESOURCE_EXHAUSTED)
+         const isQuotaError = error?.status === 'RESOURCE_EXHAUSTED' || 
+                              error?.code === 429 || 
+                              (error?.message && error.message.includes('429')) ||
+                              (error?.message && error.message.includes('Quota exceeded'));
+         
+         if (isQuotaError) {
+             if (!isRetry) {
+                 console.warn("Quota exceeded. Waiting 60s before retry...");
+                 await new Promise(resolve => setTimeout(resolve, 60000)); // 1 min backoff
+                 return performRequest(true);
+             } else {
+                 throw new Error("FATAL_QUOTA_EXCEEDED");
+             }
+         }
+         
+         // Throw other errors to be caught by the outer catch
+         throw error;
+      }
+  };
+
+  try {
+    return await performRequest(false);
+  } catch (error: any) {
+    if (error.message === "FATAL_QUOTA_EXCEEDED") {
+        throw error; // Let the caller handle the stop
+    }
     console.error("Error analyzing photo:", error);
-    return {
-      description: "Photo content analysis unavailable.",
-    };
+    // Return null to indicate failure without providing default text
+    return null; 
   }
 };

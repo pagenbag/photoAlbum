@@ -20,6 +20,7 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
   const [isExporting, setIsExporting] = useState(false);
   const [viewingPhoto, setViewingPhoto] = useState<Photo | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastAnalysisTime = useRef<number>(0);
   const { showToast, confirm } = useUI();
 
   // Edit state buffers
@@ -96,21 +97,27 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
         if (!nextPhoto) {
             // All done
             setIsAutoAnalyzing(false);
+            showToast("Auto-analysis complete", "success");
             return;
         }
 
+        // Record start time for rate limiting
+        lastAnalysisTime.current = Date.now();
+
         // Trigger analysis
         await handleAnalyze(nextPhoto);
-        
-        // The effect will re-run when analyzingIds changes (back to empty),
-        // triggering the next cycle.
     };
 
     if (isAutoAnalyzing) {
         // Only schedule next if we aren't currently busy
         if (analyzingIds.size === 0) {
-            // 4000ms delay to respect ~15 RPM rate limit (safety buffer)
-            timeoutId = window.setTimeout(processNext, 4000);
+            const now = Date.now();
+            const timeSinceLast = now - lastAnalysisTime.current;
+            // 20000ms = 20s = 3 per minute. Adding 2s buffer for safety = 22s.
+            const RATE_LIMIT_DELAY = 22000;
+            const delay = Math.max(0, RATE_LIMIT_DELAY - timeSinceLast);
+
+            timeoutId = window.setTimeout(processNext, delay);
         }
     }
 
@@ -193,17 +200,33 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
     
     try {
       const result = await analyzePhoto(photo);
-      await updatePhotoMetadata(photo.id, result);
       
-      // Update local state to reflect changes immediately
-      setPhotos(prev => prev.map(p => {
-        if (p.id === photo.id) {
-          return { ...p, ...result, processed: true };
-        }
-        return p;
-      }));
-    } catch (err) {
+      // If result exists (success), update metadata
+      if (result) {
+          await updatePhotoMetadata(photo.id, result);
+          setPhotos(prev => prev.map(p => {
+            if (p.id === photo.id) {
+              return { ...p, ...result, processed: true };
+            }
+            return p;
+          }));
+      } else {
+          // If result is null (failed but not fatal), mark as processed 
+          // to prevent infinite loops, but do not overwrite notes.
+          await updatePhotoMetadata(photo.id, {}); 
+          setPhotos(prev => prev.map(p => {
+            if (p.id === photo.id) {
+              return { ...p, processed: true };
+            }
+            return p;
+          }));
+      }
+    } catch (err: any) {
       console.error(err);
+      if (err.message === "FATAL_QUOTA_EXCEEDED") {
+          setIsAutoAnalyzing(false);
+          showToast("Auto-analysis stopped: Quota exceeded (API 429).", "error");
+      }
     } finally {
       setAnalyzingIds(prev => {
         const next = new Set(prev);
