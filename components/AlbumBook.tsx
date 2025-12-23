@@ -18,6 +18,7 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
   const [isAddingPhotos, setIsAddingPhotos] = useState(false);
   const [isAutoAnalyzing, setIsAutoAnalyzing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [viewingPhoto, setViewingPhoto] = useState<Photo | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { showToast, confirm } = useUI();
 
@@ -65,6 +66,18 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
         };
     }
   }, [album.theme]);
+
+  // Filter styles mapping
+  const filterStyles: Record<string, string> = {
+      original: "",
+      vintage: "sepia(0.3) contrast(1.1) brightness(1.05) saturate(0.85)",
+      bw: "grayscale(1) contrast(1.15) brightness(1.05)",
+      sepia: "sepia(0.8) contrast(1.1) brightness(0.95)",
+      polaroid: "contrast(1.2) brightness(1.1) saturate(1.1) sepia(0.2)",
+      cool: "contrast(1.1) brightness(1.1) saturate(0.9) hue-rotate(180deg) sepia(0.1)",
+      warm: "sepia(0.4) contrast(1.1) brightness(1.05) saturate(1.2)",
+      dramatic: "contrast(1.4) brightness(0.9) saturate(1.2) sepia(0.2)"
+  };
 
   useEffect(() => {
     loadPhotos();
@@ -440,6 +453,83 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
     }
   };
 
+  const PhotoViewer: React.FC<{ photo: Photo; onClose: () => void }> = ({ photo, onClose }) => {
+    const [imgUrl, setImgUrl] = useState<string>('');
+    
+    useEffect(() => {
+        const url = URL.createObjectURL(photo.blob);
+        setImgUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [photo]);
+
+    // Use default theme or minimal if standard, just generic clean look for overlay
+    // For the filter style:
+    const currentFilterStyle = photo.filter ? filterStyles[photo.filter] : '';
+
+    return (
+        <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]" onClick={onClose}>
+             {/* Close Button */}
+            <button 
+                onClick={onClose}
+                className="absolute top-4 right-4 z-[110] text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
+            >
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+
+            <div className="w-full max-w-7xl max-h-screen flex flex-col md:flex-row gap-6 items-center justify-center" onClick={e => e.stopPropagation()}>
+               
+               {/* Large Image */}
+               <div className="flex-1 w-full h-full flex items-center justify-center relative min-h-[50vh]">
+                   <img 
+                        src={imgUrl} 
+                        alt="Full view" 
+                        className={`max-w-full max-h-[85vh] w-auto h-auto object-contain shadow-2xl rounded-sm ${currentFilterStyle}`} 
+                   />
+               </div>
+               
+               {/* Side Panel (Metadata) */}
+               <div className="w-full md:w-80 lg:w-96 bg-stone-900/50 backdrop-blur-md text-stone-200 p-6 rounded-lg border border-white/10 overflow-y-auto max-h-[30vh] md:max-h-[85vh] flex flex-col gap-4">
+                   <div>
+                       <h3 className="text-sm font-bold uppercase tracking-wider text-stone-400 mb-1">Date</h3>
+                       <p className="font-playfair text-xl">{photo.timestamp.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                       <p className="text-sm text-stone-500">{photo.timestamp.toLocaleTimeString()}</p>
+                   </div>
+                   
+                   {photo.location && (
+                       <div>
+                           <h3 className="text-sm font-bold uppercase tracking-wider text-stone-400 mb-1">Location</h3>
+                           <div className="flex items-center gap-2">
+                                <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                <p className="font-medium text-lg">{photo.location}</p>
+                           </div>
+                       </div>
+                   )}
+
+                   {photo.description && (
+                       <div className="border-t border-white/10 pt-4">
+                           <h3 className="text-sm font-bold uppercase tracking-wider text-stone-400 mb-2">Notes</h3>
+                           <p className="font-caveat text-2xl leading-relaxed text-amber-100">{photo.description}</p>
+                       </div>
+                   )}
+                   
+                   {photo.landmarks && photo.landmarks.length > 0 && (
+                       <div className="border-t border-white/10 pt-4 flex flex-col gap-3">
+                           <h3 className="text-sm font-bold uppercase tracking-wider text-stone-400">Landmarks</h3>
+                           {photo.landmarks.map((lm, i) => (
+                               <div key={i} className="bg-white/5 p-3 rounded">
+                                   <p className="font-bold text-amber-200">{lm.name}</p>
+                                   <p className="text-sm text-stone-300 mt-1">{lm.description}</p>
+                                   <a href={lm.url} target="_blank" rel="noreferrer" className="text-xs text-amber-500 hover:text-amber-400 mt-2 inline-block uppercase tracking-wide">Read More &rarr;</a>
+                               </div>
+                           ))}
+                       </div>
+                   )}
+               </div>
+            </div>
+        </div>
+    );
+  };
+
   const PhotoCard: React.FC<{ photo: Photo, index: number }> = ({ photo, index }) => {
     const [imgUrl, setImgUrl] = useState<string>('');
     const [showFilterMenu, setShowFilterMenu] = useState(false);
@@ -460,10 +550,10 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
         vintage: "sepia-[0.3] contrast-[1.1] brightness-[1.05] saturate-[0.85]",
         bw: "grayscale-[1] contrast-[1.15] brightness-[1.05]",
         sepia: "sepia-[0.8] contrast-[1.1] brightness-[0.95]",
-        polaroid: "contrast-[1.2] brightness-[1.1] saturate-[1.1] sepia-[0.2]",
-        cool: "contrast-[1.1] brightness-[1.1] saturate-[0.9] hue-rotate(180deg) sepia-[0.1]",
-        warm: "sepia-[0.4] contrast-[1.1] brightness-[1.05] saturate-[1.2]",
-        dramatic: "contrast-[1.4] brightness-[0.9] saturate-[1.2] sepia-[0.2]"
+        polaroid: "contrast(1.2) brightness(1.1) saturate(1.1) sepia(0.2)",
+        cool: "contrast(1.1) brightness(1.1) saturate(0.9) hue-rotate(180deg) sepia(0.1)",
+        warm: "sepia(0.4) contrast(1.1) brightness(1.05) saturate(1.2)",
+        dramatic: "contrast(1.4) brightness(0.9) saturate(1.2) sepia(0.2)"
     };
 
     const currentFilter = photo.filter || 'original';
@@ -530,11 +620,13 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
         </div>
 
         {/* The Image Container with Interact Effects */}
-        <div className={`p-2 bg-white border border-stone-100 shadow-inner overflow-hidden transition-all duration-300 group-hover/card:scale-[1.02] group-hover/card:shadow-lg ${album.theme === 'minimal' ? 'group-hover/card:ring-2 group-hover/card:ring-gray-300' : 'group-hover/card:ring-2 group-hover/card:ring-stone-400/50 group-hover/card:ring-offset-2'}`}>
+        {/* Changed from overflow-hidden + object-cover to allow natural aspect ratio */}
+        <div className={`p-2 bg-white border border-stone-100 shadow-inner transition-all duration-300 group-hover/card:scale-[1.01] group-hover/card:shadow-lg ${album.theme === 'minimal' ? 'group-hover/card:ring-2 group-hover/card:ring-gray-300' : 'group-hover/card:ring-2 group-hover/card:ring-stone-400/50 group-hover/card:ring-offset-2'}`}>
            <img 
               src={imgUrl} 
               alt="Memory" 
-              className={`w-full max-h-[400px] object-cover transition-all duration-500 ${filterStyles[currentFilter]}`} 
+              onClick={() => setViewingPhoto(photo)}
+              className={`w-full h-auto max-h-[500px] object-contain cursor-zoom-in transition-all duration-500 ${filterStyles[currentFilter]}`} 
             />
         </div>
 
@@ -752,6 +844,9 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
             accept="image/*"
             multiple
         />
+        
+        {/* Full Screen Photo Viewer */}
+        {viewingPhoto && <PhotoViewer photo={viewingPhoto} onClose={() => setViewingPhoto(null)} />}
     </div>
   );
 };
