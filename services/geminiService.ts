@@ -18,6 +18,56 @@ export const blobToBase64 = (blob: Blob): Promise<string> => {
   });
 };
 
+const resizeImage = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      
+      // Target max dimension 800px to save tokens and bandwidth
+      // while maintaining enough detail for scene analysis
+      const MAX_SIZE = 800;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > MAX_SIZE || height > MAX_SIZE) {
+        if (width > height) {
+          height = Math.round(height * (MAX_SIZE / width));
+          width = MAX_SIZE;
+        } else {
+          width = Math.round(width * (MAX_SIZE / height));
+          height = MAX_SIZE;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        // Fallback to original if canvas fails
+        blobToBase64(blob).then(resolve).catch(reject);
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, width, height);
+      // Compress to JPEG 70% which is sufficient for AI analysis
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      resolve(dataUrl.split(',')[1]);
+    };
+
+    img.onerror = (e) => {
+      URL.revokeObjectURL(url);
+      reject(e);
+    };
+
+    img.src = url;
+  });
+};
+
 export interface GeminiAnalysisResult {
   description: string;
   location?: string;
@@ -30,7 +80,8 @@ export interface GeminiAnalysisResult {
 
 export const analyzePhoto = async (photo: Photo): Promise<GeminiAnalysisResult> => {
   try {
-    const base64Data = await blobToBase64(photo.blob);
+    // Use resizeImage instead of raw blobToBase64
+    const base64Data = await resizeImage(photo.blob);
 
     // Prepare location context from metadata if available
     let locationContext = "";
@@ -44,7 +95,7 @@ export const analyzePhoto = async (photo: Photo): Promise<GeminiAnalysisResult> 
         parts: [
           {
             inlineData: {
-              mimeType: photo.mimeType,
+              mimeType: 'image/jpeg', // Resized image is always JPEG
               data: base64Data
             }
           },
