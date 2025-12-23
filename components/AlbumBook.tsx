@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { jsPDF } from "jspdf";
 import { getAlbumPhotos, updatePhotoMetadata, setAlbumCover, addPhotoToAlbum } from '../services/db';
-import { analyzePhoto, GeminiAnalysisResult } from '../services/geminiService';
+import { analyzePhoto, GeminiAnalysisResult, blobToBase64 } from '../services/geminiService';
 import { Photo, Album } from '../types';
 
 interface AlbumBookProps {
@@ -15,6 +16,7 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
   const [editingPhotoId, setEditingPhotoId] = useState<number | null>(null);
   const [isAddingPhotos, setIsAddingPhotos] = useState(false);
   const [isAutoAnalyzing, setIsAutoAnalyzing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Edit state buffers
@@ -224,6 +226,152 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
     if (album.id) {
         await setAlbumCover(album.id, photoId);
         alert("Cover updated!");
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!album.id) return;
+    setIsExporting(true);
+    
+    try {
+      // Use logic from existing loadPhotos but without pagination
+      const allPhotos = [...photos]; // Photos are already sorted by state updates
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      
+      const pageWidth = 297;
+      const pageHeight = 210;
+      const halfWidth = pageWidth / 2;
+      
+      // Theme configs
+      let bgColor = '#fdfbf7';
+      let textColor = '#292524';
+      let fontName = 'times'; // jsPDF standard font
+      
+      if (album.theme === 'minimal') {
+        bgColor = '#ffffff';
+        textColor = '#1f2937';
+        fontName = 'helvetica';
+      } else if (album.theme === 'notebook') {
+        bgColor = '#f8fafc'; // slate-50
+        textColor = '#1e3a8a'; // blue-900
+        fontName = 'courier';
+      }
+
+      // Add cover page
+      doc.setFillColor(bgColor);
+      doc.rect(0, 0, pageWidth, pageHeight, 'F');
+      
+      doc.setFont(fontName, 'bold');
+      doc.setFontSize(32);
+      doc.setTextColor(textColor);
+      doc.text(album.title, pageWidth / 2, pageHeight / 2 - 10, { align: 'center' });
+      
+      doc.setFontSize(14);
+      doc.setFont(fontName, 'normal');
+      doc.text(`Created on ${album.createdAt.toLocaleDateString()}`, pageWidth / 2, pageHeight / 2 + 10, { align: 'center' });
+      
+      // Photos
+      // We process 2 photos per PDF page (Left side, Right side)
+      for (let i = 0; i < allPhotos.length; i += 2) {
+        doc.addPage();
+        doc.setFillColor(bgColor);
+        doc.rect(0, 0, pageWidth, pageHeight, 'F');
+        
+        // Draw decorative center line (spine)
+        doc.setDrawColor(200, 200, 200);
+        doc.line(halfWidth, 10, halfWidth, pageHeight - 10);
+        
+        const photosOnPage = [allPhotos[i], allPhotos[i+1]].filter(Boolean);
+        
+        for (let j = 0; j < photosOnPage.length; j++) {
+            const photo = photosOnPage[j];
+            const xOffset = j === 0 ? 0 : halfWidth;
+            const contentWidth = halfWidth - 20; // 10mm padding each side
+            const startX = xOffset + 10;
+            const startY = 20;
+            
+            // Image
+            const base64 = await blobToBase64(photo.blob);
+            
+            // Calculate aspect ratio to fit image in a box of roughly contentWidth x 100mm
+            const imgProps = doc.getImageProperties(base64);
+            const imgRatio = imgProps.width / imgProps.height;
+            let imgW = contentWidth;
+            let imgH = imgW / imgRatio;
+            
+            if (imgH > 100) {
+                imgH = 100;
+                imgW = imgH * imgRatio;
+            }
+            
+            // Center image in the top half
+            const imgX = startX + (contentWidth - imgW) / 2;
+            
+            try {
+                // jsPDF handles format detection usually, but we can hint it
+                doc.addImage(base64, photo.mimeType.split('/')[1] === 'jpeg' ? 'JPEG' : 'PNG', imgX, startY, imgW, imgH);
+            } catch (err) {
+                console.error("Failed to add image to PDF", err);
+                // Fallback text
+                doc.setFontSize(8);
+                doc.text("Image Error", imgX, startY + 10);
+            }
+            
+            // Frame/Border for image (except minimal)
+            if (album.theme !== 'minimal') {
+                doc.setDrawColor(textColor);
+                doc.setLineWidth(0.5);
+                doc.rect(imgX - 1, startY - 1, imgW + 2, imgH + 2);
+            }
+
+            // Text Metadata
+            let textY = startY + imgH + 10;
+            
+            doc.setFont(fontName, 'italic');
+            doc.setFontSize(10);
+            doc.setTextColor(textColor);
+            
+            // Date | Location
+            const dateStr = photo.timestamp.toLocaleDateString();
+            const locStr = photo.location ? ` • ${photo.location}` : '';
+            doc.text(`${dateStr}${locStr}`, startX + contentWidth / 2, textY, { align: 'center' });
+            
+            textY += 8;
+            
+            // Description
+            if (photo.description) {
+                doc.setFont(fontName, 'normal');
+                doc.setFontSize(12);
+                const splitDesc = doc.splitTextToSize(photo.description, contentWidth);
+                doc.text(splitDesc, startX, textY);
+                textY += (splitDesc.length * 5) + 2;
+            }
+            
+            // Landmarks
+            if (photo.landmarks && photo.landmarks.length > 0) {
+                textY += 5;
+                doc.setFontSize(10);
+                photo.landmarks.forEach(lm => {
+                    doc.setFont(fontName, 'bold');
+                    doc.text(lm.name, startX, textY);
+                    textY += 5;
+                    doc.setFont(fontName, 'normal');
+                    const splitLm = doc.splitTextToSize(lm.description, contentWidth);
+                    doc.text(splitLm, startX, textY);
+                    textY += (splitLm.length * 4) + 3;
+                });
+            }
+        }
+      }
+      
+      const fileName = `${album.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`;
+      doc.save(fileName);
+    } catch (e) {
+      console.error("PDF Generation failed", e);
+      alert("Failed to generate PDF. See console for details.");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -450,11 +598,18 @@ const AlbumBook: React.FC<AlbumBookProps> = ({ album, onBack }) => {
                 {isAddingPhotos ? "Adding..." : "Add Photos"}
             </button>
             <button 
-                onClick={() => window.print()} 
-                className={`${themeStyles.coverText} hover:opacity-80 flex items-center gap-2 transition-colors px-3 py-1 rounded border border-current`}
+                onClick={handleExportPDF} 
+                disabled={isExporting}
+                className={`${themeStyles.coverText} hover:opacity-80 flex items-center gap-2 transition-colors px-3 py-1 rounded border border-current disabled:opacity-50 disabled:cursor-wait`}
             >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
-                Export PDF
+                {isExporting ? (
+                    <span className="animate-pulse">Exporting...</span>
+                ) : (
+                    <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                        Export PDF
+                    </>
+                )}
             </button>
         </div>
       </div>
